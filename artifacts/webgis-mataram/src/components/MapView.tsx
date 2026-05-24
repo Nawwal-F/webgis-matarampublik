@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MapContainer, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
 import L from "leaflet";
-import { motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { LocationFeature, CategoryKey, getCategoryKey, getDisplayName, CATEGORIES } from "@/data/types";
 import type { GeoJSONData } from "@/data/types";
-import SearchBar from "./SearchBar";
-import LayerControlPanel from "./LayerControlPanel";
+import { useApp } from "@/context/AppContext";
+import { BASEMAPS } from "./BasemapControl";
+import BasemapControl from "./BasemapControl";
 import LocationPanel from "./LocationPanel";
+import Sidebar from "./Sidebar";
+import { RoutePanelInner } from "./RoutePanel";
 import geoData from "@/data/mataram.json";
 
 const CENTER: [number, number] = [-8.593, 116.1005];
@@ -87,6 +90,26 @@ function MapInitializer({ onMap }: { onMap: (m: L.Map) => void }) {
   return null;
 }
 
+function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click: (e) => onMapClick(e.latlng.lat, e.latlng.lng),
+  });
+  return null;
+}
+
+function DynamicTileLayer() {
+  const { basemap } = useApp();
+  const info = BASEMAPS[basemap];
+  return (
+    <TileLayer
+      key={basemap}
+      url={info.url}
+      attribution={info.attribution}
+      maxZoom={info.maxZoom}
+    />
+  );
+}
+
 export default function MapView() {
   const [selected, setSelected] = useState<LocationFeature | null>(null);
   const [flyTarget, setFlyTarget] = useState<LocationFeature | null>(null);
@@ -97,6 +120,9 @@ export default function MapView() {
   const [visibleLayers, setVisibleLayers] = useState<Set<CategoryKey>>(
     new Set(Object.keys(CATEGORIES) as CategoryKey[])
   );
+
+  const { theme, routePickMode, setRouteFrom, setRouteTo, setRoutePickMode, routePanelOpen } = useApp();
+  const isDark = theme === "dark";
 
   const data = geoData as GeoJSONData;
   const validFeatures = data.features.filter(
@@ -132,7 +158,7 @@ export default function MapView() {
     setFlyTarget(null);
   }, []);
 
-  const handleGPS = useCallback(() => {
+  const handleGPSRequest = useCallback((cb?: (lat: number, lng: number) => void) => {
     const map = mapInstanceRef.current;
     if (!map || gpsState === "loading") return;
     setGpsState("loading");
@@ -147,6 +173,7 @@ export default function MapView() {
         gpsMarkerRef.current = marker;
         map.flyTo([lat, lng], 16, { duration: 1.2 });
         setGpsState("active");
+        if (cb) cb(lat, lng);
       },
       () => {
         setGpsState("idle");
@@ -156,90 +183,95 @@ export default function MapView() {
     );
   }, [gpsState]);
 
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    if (routePickMode === "from") {
+      setRouteFrom({ lat, lng, label: `Titik ${lat.toFixed(4)}, ${lng.toFixed(4)}` });
+      setRoutePickMode(null);
+    } else if (routePickMode === "to") {
+      setRouteTo({ lat, lng, label: `Titik ${lat.toFixed(4)}, ${lng.toFixed(4)}` });
+      setRoutePickMode(null);
+    }
+  }, [routePickMode, setRouteFrom, setRouteTo, setRoutePickMode]);
+
   const visibleCount = Object.entries(counts)
     .filter(([k]) => visibleLayers.has(k as CategoryKey))
     .reduce((s, [, v]) => s + v, 0);
 
+  const cursorStyle = routePickMode ? "crosshair" : "grab";
+
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-green-50">
+    <div className={`relative w-full h-screen overflow-hidden ${isDark ? "bg-gray-950" : "bg-green-50"}`}>
+      {/* Route pick mode overlay hint */}
+      <AnimatePresence>
+        {routePickMode && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[750] pointer-events-none">
+            <div className={`px-4 py-2.5 rounded-2xl text-sm font-medium shadow-xl flex items-center gap-2 border ${
+              routePickMode === "from"
+                ? "bg-blue-500 text-white border-blue-400"
+                : "bg-red-500 text-white border-red-400"
+            }`}>
+              <span>🖱️</span>
+              <span>
+                {routePickMode === "from" ? "Klik peta untuk titik awal" : "Klik peta untuk titik tujuan"}
+              </span>
+              <span className="text-xs opacity-75">— Esc untuk batal</span>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <MapContainer
         center={CENTER}
         zoom={ZOOM}
-        style={{ width: "100%", height: "100%" }}
+        style={{ width: "100%", height: "100%", cursor: cursorStyle }}
         zoomControl={false}
         className="z-0"
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          maxZoom={19}
-        />
+        <DynamicTileLayer />
         <ZoomControl position="bottomright" />
         <MapInitializer onMap={(m) => { mapInstanceRef.current = m; }} />
         <ZoomWatcher onZoom={setZoom} />
         <FlyToFeature feature={flyTarget} />
+        <MapClickHandler onMapClick={handleMapClick} />
         <MapLayerManager
           features={validFeatures}
           visibleLayers={visibleLayers}
           selected={selected}
           onMarkerClick={handleMarkerClick}
         />
+        <RoutePanelInner
+          features={validFeatures}
+          onGPSRequest={handleGPSRequest}
+        />
       </MapContainer>
 
-      {/* Top controls */}
-      <div className="absolute top-4 left-4 right-4 z-[700] flex items-center gap-3 flex-wrap pointer-events-auto">
-        <div className="flex-1 min-w-0">
-          <SearchBar features={validFeatures} onSelect={handleSelect} />
-        </div>
-        <div className="flex items-center gap-2">
-          <LayerControlPanel visibleLayers={visibleLayers} onToggle={toggleLayer} counts={counts} />
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleGPS}
-            title="Lokasi GPS saya"
-            className="w-11 h-11 bg-white/95 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/60 hover:shadow-lg transition-shadow cursor-pointer text-xl"
-            style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}
-          >
-            {gpsState === "loading" ? (
-              <motion.span
-                animate={{ rotate: 360 }}
-                transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-                className="inline-block text-blue-500"
-              >⟳</motion.span>
-            ) : (
-              <span className={gpsState === "active" ? "text-blue-500" : "text-gray-600"}>
-                {gpsState === "active" ? "📍" : "🎯"}
-              </span>
-            )}
-          </motion.button>
+      {/* Top bar / Sidebar */}
+      <Sidebar
+        features={validFeatures}
+        visibleLayers={visibleLayers}
+        onToggleLayer={toggleLayer}
+        counts={counts}
+        onSelect={handleSelect}
+        visibleCount={visibleCount}
+        gpsState={gpsState}
+        onGPS={() => handleGPSRequest()}
+      />
+
+      {/* Right side controls: Basemap + Zoom info */}
+      <div className="absolute right-4 bottom-16 z-[700] flex flex-col items-end gap-2 pointer-events-auto">
+        <BasemapControl />
+        <div className={`px-3 py-1.5 rounded-xl text-xs font-mono border shadow backdrop-blur-md ${
+          isDark ? "bg-gray-800/90 border-gray-700/60 text-gray-400" : "bg-white/90 border-white/60 text-gray-500"
+        }`}>
+          Z{zoom}
         </div>
       </div>
 
-      {/* Bottom left: zoom indicator */}
-      <div className="absolute bottom-14 left-4 z-[700] pointer-events-none">
-        <div className="bg-white/90 backdrop-blur-md rounded-xl px-3 py-1.5 text-xs font-mono text-gray-500 shadow border border-white/60">
-          Zoom {zoom}
-        </div>
-      </div>
-
-      {/* Bottom center: stats */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[700] pointer-events-none">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-md border border-white/60 text-sm whitespace-nowrap"
-        >
-          <span className="text-green-600 font-bold">{visibleCount}</span>
-          <span className="text-gray-400 text-xs">dari {validFeatures.length} lokasi</span>
-          <span className="text-gray-200">|</span>
-          <span className="text-gray-500 text-xs hidden sm:inline">Mataram Baru, Lombok</span>
-          <span>🌴</span>
-        </motion.div>
-      </div>
-
-      <LocationPanel feature={selected} onClose={() => setSelected(null)} />
+      {/* Info panel (slide in from right) */}
+      <LocationPanel
+        feature={selected}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }
