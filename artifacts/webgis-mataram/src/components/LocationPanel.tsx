@@ -7,6 +7,7 @@ interface LocationPanelProps {
   feature: LocationFeature | null;
   onClose: () => void;
   allFeatures?: LocationFeature[];
+  onSelect?: (f: LocationFeature) => void;
 }
 
 function distKm(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -17,7 +18,7 @@ function distKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export default function LocationPanel({ feature, onClose, allFeatures = [] }: LocationPanelProps) {
+export default function LocationPanel({ feature, onClose, allFeatures = [], onSelect }: LocationPanelProps) {
   const { setRouteToFeature, theme, toggleBookmark, isBookmarked } = useApp();
   const isDark = theme === "dark";
   const cat = feature ? getCategoryKey(feature.properties) : null;
@@ -264,7 +265,7 @@ export default function LocationPanel({ feature, onClose, allFeatures = [] }: Lo
                           isDark ? "bg-gray-800/40 border-gray-700/30 hover:bg-gray-700/50" : "bg-gray-50/70 border-gray-100 hover:bg-gray-100"
                         }`}
                         onClick={() => {
-                          /* flyTo is handled in MapView via setSelected propagation */
+                          if (onSelect) onSelect(f);
                         }}
                       >
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base flex-shrink-0" style={{ background: nInfo.bgColor }}>

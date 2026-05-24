@@ -287,6 +287,7 @@ export default function MapView() {
           feature={selected}
           onClose={() => setSelected(null)}
           allFeatures={validFeatures}
+          onSelect={handleSelect}
         />
       </div>
 
