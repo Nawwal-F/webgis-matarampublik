@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "WebGIS Mataram Baru"
+version = "1.0.0"
+id = "artifacts/webgis-mataram"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23061
+
+[services.development]
+run = "pnpm --filter @workspace/webgis-mataram run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/webgis-mataram", "run", "build" ]
+publicDir = "artifacts/webgis-mataram/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23061"
+BASE_PATH = "/"

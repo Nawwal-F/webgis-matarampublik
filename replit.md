@@ -1,45 +1,58 @@
-# [Project name]
+# WebGIS Mataram Baru
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+WebGIS interaktif peta Mataram Baru, Lombok dengan 651 lokasi dari data OpenStreetMap.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/webgis-mataram run dev` — jalankan WebGIS (port 23061)
+- `pnpm --filter @workspace/api-server run dev` — jalankan API server (port 5000)
+- `pnpm run typecheck` — typecheck seluruh packages
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Frontend: React + Vite, Tailwind CSS v4, Framer Motion
+- Peta: Leaflet + react-leaflet
+- Data: GeoJSON (651 lokasi Mataram Baru, Lombok)
+- Animasi: Framer Motion
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/webgis-mataram/` — aplikasi WebGIS utama
+- `artifacts/webgis-mataram/src/data/mataram.json` — data GeoJSON 651 lokasi
+- `artifacts/webgis-mataram/src/data/types.ts` — tipe TypeScript dan kategori lokasi
+- `artifacts/webgis-mataram/src/components/` — semua komponen UI
+- `attached_assets/mataram_baru_1779602025622.geojson` — sumber data asli
+
+## Fitur
+
+- **Loading screen** 7 detik dengan tema hijau tropis, animasi daun, bisa di-skip (Enter/Spasi)
+- **Peta interaktif** Leaflet — zoom, pan, tile OpenStreetMap
+- **Search** — cari lokasi/kategori dengan Ctrl+K, autocomplete real-time
+- **GPS** — tampilkan lokasi pengguna di peta
+- **Kontrol layer** — tampilkan/sembunyikan 13 kategori lokasi
+- **Panel informasi slide-in** — klik marker → panel animasi dari kanan dengan info lengkap
+- **651 lokasi** — restoran, kafe, hotel, ATM, rumah sakit, dll.
+
+## Kategori Lokasi
+
+atm, bar, cafe, fast_food, pub, restaurant, shelter, hotel, hostel, guest_house, motel, chalet, hospital
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-_Describe the high-level user-facing capabilities of this app once they exist._
+- GeoJSON disalin ke `src/data/mataram.json` untuk menghindari restricsi `fs.strict` Vite
+- Layer markers dikelola manual via L.LayerGroup untuk performa lebih baik dari GeoJSON layer bawaan
+- `useMap()` hooks ada di dalam MapContainer sebagai null-rendering children, state di-lift ke parent
+- Framer Motion untuk semua animasi — loading screen, panel slide-in, dropdown
+- Kategori lokasi diderivasikan dari field `amenity` dan `tourism` pada properties GeoJSON
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Bahasa Indonesia untuk teks UI
+- Tema hijau tropis (sesuai Lombok/NTB)
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- `framer-motion` sudah terinstall via catalog, tidak perlu install ulang
+- Leaflet CSS harus diimport di `index.css` sebelum tailwind utilities
+- File GeoJSON asli di `attached_assets/` tidak bisa diakses langsung dari Vite dev server karena `fs.strict: true`
