@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MapContainer, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
 import L from "leaflet";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import { toast } from "sonner";
 import { LocationFeature, CategoryKey, getCategoryKey, getDisplayName, CATEGORIES } from "@/data/types";
 import type { GeoJSONData } from "@/data/types";
 import { useApp } from "@/context/AppContext";
 import { BASEMAPS } from "./BasemapControl";
-import BasemapControl from "./BasemapControl";
 import LocationPanel from "./LocationPanel";
-import Sidebar from "./Sidebar";
+import TopBar from "./TopBar";
+import FloatingToolbar from "./FloatingToolbar";
+import BookmarksPanel from "./BookmarksPanel";
 import { RoutePanelInner } from "./RoutePanel";
 import geoData from "@/data/mataram.json";
 
@@ -55,7 +57,7 @@ function MapLayerManager({
         zIndexOffset: isSel ? 2000 : 0,
       });
       marker.bindTooltip(
-        `<div style="font-size:12px;font-weight:600;padding:3px 8px;border-radius:8px;background:white;color:#1f2937;border:1px solid #e5e7eb;box-shadow:0 2px 8px rgba(0,0,0,0.1)">${info.icon} ${getDisplayName(f.properties)}</div>`,
+        `<div style="font-size:12px;font-weight:600;padding:4px 10px;border-radius:10px;background:white;color:#1f2937;border:1px solid #e5e7eb;box-shadow:0 2px 8px rgba(0,0,0,0.12)">${info.icon} ${getDisplayName(f.properties)}</div>`,
         { permanent: false, direction: "top", offset: [0, -32] }
       );
       marker.on("click", () => onMarkerClick(f));
@@ -121,7 +123,7 @@ export default function MapView() {
     new Set(Object.keys(CATEGORIES) as CategoryKey[])
   );
 
-  const { theme, routePickMode, setRouteFrom, setRouteTo, setRoutePickMode, routePanelOpen } = useApp();
+  const { theme, routePickMode, setRouteFrom, setRouteTo, setRoutePickMode, bookmarksPanelOpen } = useApp();
   const isDark = theme === "dark";
 
   const data = geoData as GeoJSONData;
@@ -173,11 +175,12 @@ export default function MapView() {
         gpsMarkerRef.current = marker;
         map.flyTo([lat, lng], 16, { duration: 1.2 });
         setGpsState("active");
+        toast.success("GPS ditemukan!", { description: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, duration: 3000 });
         if (cb) cb(lat, lng);
       },
       () => {
         setGpsState("idle");
-        alert("Tidak dapat mengakses GPS. Pastikan izin lokasi diberikan.");
+        toast.error("GPS tidak dapat diakses", { description: "Pastikan izin lokasi telah diberikan di browser Anda.", duration: 4000 });
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -185,11 +188,13 @@ export default function MapView() {
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
     if (routePickMode === "from") {
-      setRouteFrom({ lat, lng, label: `Titik ${lat.toFixed(4)}, ${lng.toFixed(4)}` });
+      setRouteFrom({ lat, lng, label: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
       setRoutePickMode(null);
+      toast.success("Titik awal dipilih", { duration: 2000 });
     } else if (routePickMode === "to") {
-      setRouteTo({ lat, lng, label: `Titik ${lat.toFixed(4)}, ${lng.toFixed(4)}` });
+      setRouteTo({ lat, lng, label: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
       setRoutePickMode(null);
+      toast.success("Titik tujuan dipilih", { duration: 2000 });
     }
   }, [routePickMode, setRouteFrom, setRouteTo, setRoutePickMode]);
 
@@ -199,24 +204,32 @@ export default function MapView() {
 
   const cursorStyle = routePickMode ? "crosshair" : "grab";
 
+  /* offset so panels don't overlap: shift right panel group left when bookmarks open */
+  const panelRightOffset = bookmarksPanelOpen ? "right-80" : "right-0";
+
   return (
-    <div className={`relative w-full h-screen overflow-hidden ${isDark ? "bg-gray-950" : "bg-green-50"}`}>
-      {/* Route pick mode overlay hint */}
+    <div className={`relative w-full h-screen overflow-hidden ${isDark ? "bg-gray-950" : "bg-slate-100"}`}>
+      {/* Route pick mode banner */}
       <AnimatePresence>
         {routePickMode && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[750] pointer-events-none">
-            <div className={`px-4 py-2.5 rounded-2xl text-sm font-medium shadow-xl flex items-center gap-2 border ${
+          <motion.div
+            initial={{ y: -60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -60, opacity: 0 }}
+            className="absolute top-20 left-1/2 -translate-x-1/2 z-[750] pointer-events-none"
+          >
+            <div className={`px-5 py-3 rounded-2xl text-sm font-semibold shadow-2xl flex items-center gap-2.5 border backdrop-blur-xl ${
               routePickMode === "from"
-                ? "bg-blue-500 text-white border-blue-400"
-                : "bg-red-500 text-white border-red-400"
+                ? "bg-blue-500/95 text-white border-blue-400/50"
+                : "bg-orange-500/95 text-white border-orange-400/50"
             }`}>
-              <span>🖱️</span>
+              <span className="text-base">🖱️</span>
               <span>
                 {routePickMode === "from" ? "Klik peta untuk titik awal" : "Klik peta untuk titik tujuan"}
               </span>
-              <span className="text-xs opacity-75">— Esc untuk batal</span>
+              <span className="text-xs opacity-70">— Esc untuk batal</span>
             </div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -228,7 +241,7 @@ export default function MapView() {
         className="z-0"
       >
         <DynamicTileLayer />
-        <ZoomControl position="bottomright" />
+        <ZoomControl position="bottomleft" />
         <MapInitializer onMap={(m) => { mapInstanceRef.current = m; }} />
         <ZoomWatcher onZoom={setZoom} />
         <FlyToFeature feature={flyTarget} />
@@ -245,32 +258,42 @@ export default function MapView() {
         />
       </MapContainer>
 
-      {/* Top bar / Sidebar */}
-      <Sidebar
+      {/* Top bar */}
+      <TopBar
         features={validFeatures}
         visibleLayers={visibleLayers}
-        onToggleLayer={toggleLayer}
         counts={counts}
         onSelect={handleSelect}
         visibleCount={visibleCount}
-        gpsState={gpsState}
-        onGPS={() => handleGPSRequest()}
       />
 
-      {/* Right side controls: Basemap + Zoom info */}
-      <div className="absolute right-4 bottom-16 z-[700] flex flex-col items-end gap-2 pointer-events-auto">
-        <BasemapControl />
-        <div className={`px-3 py-1.5 rounded-xl text-xs font-mono border shadow backdrop-blur-md ${
-          isDark ? "bg-gray-800/90 border-gray-700/60 text-gray-400" : "bg-white/90 border-white/60 text-gray-500"
-        }`}>
-          Z{zoom}
+      {/* Right floating toolbar — shift left when location panel is open */}
+      <div className={`absolute top-0 h-full z-[700] pointer-events-none transition-all duration-300 ${selected ? "right-80" : "right-4"}`}>
+        <div className="h-full flex items-center pointer-events-auto">
+          <FloatingToolbar
+            gpsState={gpsState}
+            onGPS={() => handleGPSRequest()}
+            visibleLayers={visibleLayers}
+            onToggleLayer={toggleLayer}
+            counts={counts}
+            zoom={zoom}
+          />
         </div>
       </div>
 
-      {/* Info panel (slide in from right) */}
-      <LocationPanel
-        feature={selected}
-        onClose={() => setSelected(null)}
+      {/* Location panel (slide from right) */}
+      <div className={`transition-all duration-300 ${bookmarksPanelOpen ? panelRightOffset : ""}`}>
+        <LocationPanel
+          feature={selected}
+          onClose={() => setSelected(null)}
+          allFeatures={validFeatures}
+        />
+      </div>
+
+      {/* Bookmarks panel (slide from right) */}
+      <BookmarksPanel
+        features={validFeatures}
+        onSelectFeature={handleSelect}
       />
     </div>
   );

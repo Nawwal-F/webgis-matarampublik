@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { LocationFeature } from "@/data/types";
 
 export type BasemapId = "standard" | "satellite" | "topo" | "light" | "dark";
@@ -24,9 +24,22 @@ interface AppContextValue {
   routePanelOpen: boolean;
   setRoutePanelOpen: (o: boolean) => void;
   setRouteToFeature: (f: LocationFeature) => void;
+  bookmarks: number[];
+  toggleBookmark: (osmId: number) => void;
+  isBookmarked: (osmId: number) => boolean;
+  bookmarksPanelOpen: boolean;
+  setBookmarksPanelOpen: (o: boolean) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
+
+function loadBookmarks(): number[] {
+  try {
+    return JSON.parse(localStorage.getItem("webgis-bookmarks") ?? "[]");
+  } catch {
+    return [];
+  }
+}
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>("light");
@@ -35,14 +48,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [routeTo, setRouteTo] = useState<RoutePoint | null>(null);
   const [routePickMode, setRoutePickMode] = useState<"from" | "to" | null>(null);
   const [routePanelOpen, setRoutePanelOpen] = useState(false);
+  const [bookmarks, setBookmarks] = useState<number[]>(loadBookmarks);
+  const [bookmarksPanelOpen, setBookmarksPanelOpen] = useState(false);
 
   useEffect(() => {
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("webgis-bookmarks", JSON.stringify(bookmarks));
+  }, [bookmarks]);
 
   const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
 
@@ -53,6 +68,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setRoutePanelOpen(true);
   };
 
+  const toggleBookmark = useCallback((osmId: number) => {
+    setBookmarks((prev) =>
+      prev.includes(osmId) ? prev.filter((id) => id !== osmId) : [...prev, osmId]
+    );
+  }, []);
+
+  const isBookmarked = useCallback((osmId: number) => bookmarks.includes(osmId), [bookmarks]);
+
   return (
     <AppContext.Provider value={{
       theme, toggleTheme,
@@ -62,6 +85,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       routePickMode, setRoutePickMode,
       routePanelOpen, setRoutePanelOpen,
       setRouteToFeature,
+      bookmarks, toggleBookmark, isBookmarked,
+      bookmarksPanelOpen, setBookmarksPanelOpen,
     }}>
       {children}
     </AppContext.Provider>
